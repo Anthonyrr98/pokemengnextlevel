@@ -87,9 +87,17 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthSuccess }) => {
 
       // 先只读一次 body（stream 只能读一次），再解析 JSON
       const text = await response.text();
-      let data: Record<string, unknown>;
+      interface AuthResponse {
+        username?: string;
+        token?: string;
+        userId?: number;
+        isAdmin?: boolean;
+        error?: string;
+        message?: string;
+      }
+      let data: AuthResponse;
       try {
-        data = text ? JSON.parse(text) : {};
+        data = (text ? JSON.parse(text) : {}) as AuthResponse;
       } catch {
         setError(`服务器错误 (${response.status}): ${text || '无法解析响应'}`);
         setIsLoading(false);
@@ -98,30 +106,33 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthSuccess }) => {
 
       if (!response.ok) {
         // 显示详细错误：优先用 message（如数据库具体错误），否则用 error
-        const detail = data.message && data.message !== data.error ? `${data.error || '注册失败'}：${data.message}` : (data.error || data.message || `${mode === 'login' ? '登录' : '注册'}失败`);
+        const errMsg = data.error ?? data.message ?? `${mode === 'login' ? '登录' : '注册'}失败`;
+        const detail = data.message && data.message !== data.error ? `${errMsg}：${data.message}` : errMsg;
         setError(detail);
         setIsLoading(false);
         return;
       }
 
       // 检查响应数据是否完整
-      if (!data.username || !data.token) {
+      const resUsername = data.username;
+      const resToken = data.token;
+      if (!resUsername || !resToken) {
         setError('服务器响应不完整，请重试');
         setIsLoading(false);
         return;
       }
 
       // 保存认证信息
-      localStorage.setItem('GENMON_USERNAME', data.username);
-      localStorage.setItem('GENMON_AUTH_TOKEN', data.token);
-      localStorage.setItem('GENMON_USER_ID', String(data.userId || ''));
+      localStorage.setItem('GENMON_USERNAME', resUsername);
+      localStorage.setItem('GENMON_AUTH_TOKEN', resToken);
+      localStorage.setItem('GENMON_USER_ID', String(data.userId ?? ''));
       localStorage.setItem('GENMON_IS_ADMIN', (mode === 'login' && data.isAdmin) ? 'true' : 'false');
 
       setSuccess(`${mode === 'login' ? '登录' : '注册'}成功！`);
       
       // 延迟一下再调用回调，让用户看到成功消息
       setTimeout(() => {
-        onAuthSuccess(data.username, data.token);
+        onAuthSuccess(resUsername, resToken);
       }, 500);
     } catch (err: any) {
       // 网络错误或其他错误

@@ -208,4 +208,44 @@ A：在 **Settings → Environment Variables** 检查 `DATABASE_URL` 是否填�
 **Q：前端显示“无法连接到后端”？**  
 A：检查 `VITE_BACKEND_URL` 是否等于当前访问的域名（如 `https://xxx.vercel.app`），且没有多写 `/api` 或路径。
 
+---
+
+## 九、在 Vercel 部署下重置用户密码（忘记密码）
+
+Vercel 是 **Serverless**，没有常驻服务器，不能像在本地那样 SSH 进去执行 `node scripts/reset-password.js`。可以用下面两种方式之一。
+
+### 方法一：在本机用同一份数据库跑脚本（推荐）
+
+1. 在 Vercel 项目里：**Settings → Environment Variables**，找到 `DATABASE_URL`，复制其 **Value**（或点击眼睛图标查看）。
+2. 在本机项目里：打开或新建 `backend/.env`，写入一行：
+   ```text
+   DATABASE_URL=你复制的连接串
+   ```
+3. 在本机终端执行（把 `用户名`、`新密码` 换成实际值）：
+   ```bash
+   cd backend
+   node scripts/reset-password.js 用户名 新密码
+   ```
+4. 脚本会连到 **Vercel 用的同一个 MySQL**，把该用户的密码更新为新密码。之后用新密码在游戏里登录即可。
+
+**注意**：本机要能访问该数据库（若数据库只允许 Vercel IP 白名单，本机可能连不上，此时用下面的方法二）。
+
+### 方法二：调用管理员重置密码 API（无需本机连数据库）
+
+若在 Vercel 环境变量里配置了 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`，可以用**管理员账号**调用重置接口，在任意能访问你站点的电脑上用浏览器或 curl 即可。
+
+1. 用管理员账号先登录一次，拿到返回的 `token`（或使用下面「用管理员密码直接调 API」的方式）。
+2. 调用重置密码接口：
+   ```bash
+   curl -X POST "https://你的域名.vercel.app/api/auth/admin/reset-password" \
+     -H "Content-Type: application/json" \
+     -d '{"username":"要重置的用户名","newPassword":"新密码","adminUsername":"管理员用户名","adminPassword":"管理员密码"}'
+   ```
+   成功会返回 `{"success":true,"message":"密码已重置"}`。
+3. 该用户用**新密码**登录游戏即可。
+
+这样不需要在 Vercel 上“执行命令”，也不需要本机连接数据库，只要能用浏览器或 curl 访问你的 Vercel 域名即可。
+
+---
+
 按上述步骤在 Vercel 里为该项目配置好环境变量和构建命令后，前后端会一起部署在同一域名下，前端通过 `VITE_BACKEND_URL` 访问 `/api/*` 接口。

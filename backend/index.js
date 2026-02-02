@@ -277,6 +277,51 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// 管理员重置用户密码（忘记密码时用，Vercel 上无需跑脚本，直接调此接口）
+app.post('/api/auth/admin/reset-password', async (req, res) => {
+  const { username, newPassword, adminUsername, adminPassword } = req.body;
+
+  if (!username || !newPassword || !adminUsername || !adminPassword) {
+    return res.status(400).json({ error: '请提供 username、newPassword、adminUsername、adminPassword' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: '新密码长度至少为 6 个字符' });
+  }
+
+  if (!pool) {
+    return res.status(503).json({ error: '数据库未配置' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    // 验证管理员身份
+    const [adminRows] = await conn.query(
+      'SELECT id, username, password, COALESCE(isAdmin, 0) AS isAdmin FROM `User` WHERE username = ? LIMIT 1',
+      [adminUsername]
+    );
+    if (adminRows.length === 0 || !verifyPassword(adminPassword, adminRows[0].password) || !adminRows[0].isAdmin) {
+      return res.status(403).json({ error: '管理员账号或密码错误，或该账号不是管理员' });
+    }
+
+    // 查找要重置的用户
+    const [targetRows] = await conn.query('SELECT id FROM `User` WHERE username = ? LIMIT 1', [username]);
+    if (targetRows.length === 0) {
+      return res.status(404).json({ error: '要重置的用户不存在' });
+    }
+
+    const hash = hashPassword(newPassword);
+    await conn.query('UPDATE `User` SET password = ?, updatedAt = NOW() WHERE username = ?', [hash, username]);
+
+    res.json({ success: true, message: '密码已重置' });
+  } catch (error) {
+    console.error('Admin reset-password error:', error);
+    res.status(500).json({ error: '重置失败', message: error.message });
+  } finally {
+    conn.release();
+  }
+});
+
 // 验证 token（简化版中间件）
 async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];

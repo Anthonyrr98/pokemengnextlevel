@@ -85,12 +85,12 @@ const AuthPanel: React.FC<AuthPanelProps> = ({ onAuthSuccess }) => {
         }),
       });
 
-      let data;
+      // 先只读一次 body（stream 只能读一次），再解析 JSON
+      const text = await response.text();
+      let data: Record<string, unknown>;
       try {
-        data = await response.json();
-      } catch (parseError) {
-        // 如果响应不是 JSON，尝试读取文本
-        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } catch {
         setError(`服务器错误 (${response.status}): ${text || '无法解析响应'}`);
         setIsLoading(false);
         return;
